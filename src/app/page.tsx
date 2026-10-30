@@ -10,9 +10,12 @@ import { SettingsModal } from '@/components/settings-modal';
 import { PWAInstallPrompt } from '@/components/pwa-install-prompt';
 import { SavedDraftsModal } from '@/components/saved-drafts-modal';
 import { StoredDraft } from '@/lib/drafts';
+import { LLMProvider, DEFAULT_CUSTOM_ENDPOINT } from '@/lib/llm-types';
 
 export default function Home() {
   // Settings state
+  const [provider, setProvider] = useState<LLMProvider>('gemini');
+  const [baseUrl, setBaseUrl] = useState<string>(DEFAULT_CUSTOM_ENDPOINT);
   const [apiKey, setApiKey] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>(
     'gemini-flash-latest'
@@ -29,46 +32,53 @@ export default function Home() {
 
   // Load settings from localStorage on mount
   useEffect(() => {
-    const storedApiKey = localStorage.getItem('gemini_api_key');
-    const storedModel = localStorage.getItem('gemini_model');
-    const storedModelDisplayName = localStorage.getItem(
-      'gemini_model_display_name'
-    );
+    const storedProvider =
+      (localStorage.getItem('llm_provider') as LLMProvider) || 'gemini';
+    setProvider(storedProvider);
 
-    if (storedApiKey) {
+    if (storedProvider === 'openai_compatible') {
+      const customKey = localStorage.getItem('custom_api_key') || '';
+      const customModel = localStorage.getItem('custom_model') || '';
+      const customModelName =
+        localStorage.getItem('custom_model_display_name') ||
+        customModel ||
+        'Custom Model';
+      const customEp =
+        localStorage.getItem('custom_endpoint') || DEFAULT_CUSTOM_ENDPOINT;
+
+      setBaseUrl(customEp);
+      setApiKey(customKey);
+      setSelectedModel(customModel);
+      setModelDisplayName(customModelName);
+      if (!customKey) {
+        setShowSetupPrompt(true);
+      }
+    } else {
+      const storedApiKey = localStorage.getItem('gemini_api_key') || '';
+      const storedModel =
+        localStorage.getItem('gemini_model') || 'gemini-flash-latest';
+      const storedModelDisplayName =
+        localStorage.getItem('gemini_model_display_name') || 'Gemini 2.5 Flash';
+
       setApiKey(storedApiKey);
-    } else {
-      setShowSetupPrompt(true);
-    }
-
-    if (storedModel) {
       setSelectedModel(storedModel);
-    } else {
-      // Set default to gemini-flash-latest
-      setSelectedModel('gemini-flash-latest');
-    }
-
-    if (storedModelDisplayName) {
       setModelDisplayName(storedModelDisplayName);
+
+      if (!storedApiKey) {
+        setShowSetupPrompt(true);
+      }
     }
   }, []);
-
-  useEffect(() => {
-    if (apiKey) {
-      localStorage.setItem('gemini_api_key', apiKey);
-    }
-  }, [apiKey]);
-
-  useEffect(() => {
-    localStorage.setItem('gemini_model', selectedModel);
-    localStorage.setItem('gemini_model_display_name', modelDisplayName);
-  }, [selectedModel, modelDisplayName]);
 
   const handleSaveSettings = (
     newApiKey: string,
     newModel: string,
-    newModelDisplayName?: string
+    newModelDisplayName?: string,
+    newProvider: LLMProvider = 'gemini',
+    newBaseUrl?: string
   ) => {
+    setProvider(newProvider);
+    if (newBaseUrl) setBaseUrl(newBaseUrl);
     setApiKey(newApiKey);
     setSelectedModel(newModel);
     setModelDisplayName(newModelDisplayName || newModel);
@@ -127,7 +137,7 @@ export default function Home() {
                       Setup Required
                     </h3>
                     <p className="font-medium text-black">
-                      Add your Gemini API key to start generating PRDs
+                      Configure your API key to start generating PRDs
                     </p>
                   </div>
                 </div>
@@ -147,6 +157,8 @@ export default function Home() {
               apiKey={apiKey}
               selectedModel={selectedModel}
               modelDisplayName={modelDisplayName}
+              provider={provider}
+              baseUrl={baseUrl}
               currentStep={currentStep}
               setCurrentStep={setCurrentStep}
               generatedPrd={generatedPrd}
@@ -171,6 +183,8 @@ export default function Home() {
         onSave={handleSaveSettings}
         currentApiKey={apiKey}
         currentModel={selectedModel}
+        currentProvider={provider}
+        currentBaseUrl={baseUrl}
       />
 
       {/* PWA Install Prompt */}

@@ -1,22 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Type, GoogleGenAI } from '@google/genai';
+import { Type } from '@google/genai';
 import { DEFAULT_PRD_INPUT, PrdInput } from '../../../lib/prd';
 import { getContextHeader } from '../_lib/datetime';
+import { callLLMJson } from '../_lib/llm-service';
+import { LLMProvider } from '@/lib/llm-types';
 
 export async function POST(request: NextRequest) {
   try {
-    const { productIdea, images, apiKey, model } = (await request.json()) as {
-      productIdea?: string;
-      images?: Array<{
-        id: string;
-        name: string;
-        type: string;
-        size: number;
-        data: string;
-      }>;
-      apiKey?: string;
-      model?: string;
-    };
+    const { productIdea, images, apiKey, model, provider, baseUrl } =
+      (await request.json()) as {
+        productIdea?: string;
+        images?: Array<{
+          id: string;
+          name: string;
+          type: string;
+          size: number;
+          data: string;
+        }>;
+        apiKey?: string;
+        model?: string;
+        provider?: LLMProvider;
+        baseUrl?: string;
+      };
 
     if (!apiKey || typeof apiKey !== 'string') {
       return NextResponse.json(
@@ -31,8 +36,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const client = new GoogleGenAI({ apiKey });
 
     // Build image context if images are provided
     let imageContext = '';
@@ -51,53 +54,54 @@ export async function POST(request: NextRequest) {
 
 User's Idea: "${productIdea}"${imageContext}
 
-Return the response as a JSON object that strictly adheres to the provided schema. For features, use bullet points within the string. For success metrics, include specific, measurable KPIs with targets where appropriate.`;
+Return the response as a JSON object that strictly adheres to the requested fields:
+- productName
+- targetAudience
+- problemStatement
+- proposedSolution
+- coreFeatures (use bullet points within string)
+- keyFeatures (use bullet points within string)
+- businessGoals (use bullet points within string)
+- successMetrics (include specific, measurable KPIs with targets)
+- futureFeatures
+- techStack
+- constraints`;
 
     // Add current date/time context to the prompt
     const promptWithContext = getContextHeader() + basePrompt;
 
-    const response = await client.models.generateContent({
-      model: model || 'gemini-flash-latest',
-      contents: promptWithContext,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            productName: { type: Type.STRING },
-            targetAudience: { type: Type.STRING },
-            problemStatement: { type: Type.STRING },
-            proposedSolution: { type: Type.STRING },
-            coreFeatures: { type: Type.STRING },
-            keyFeatures: { type: Type.STRING },
-            businessGoals: { type: Type.STRING },
-            successMetrics: { type: Type.STRING },
-            futureFeatures: { type: Type.STRING },
-            techStack: { type: Type.STRING },
-            constraints: { type: Type.STRING }
-          },
-          required: [
-            'productName',
-            'targetAudience',
-            'problemStatement',
-            'proposedSolution',
-            'coreFeatures',
-            'keyFeatures',
-            'businessGoals',
-            'successMetrics'
-          ]
-        }
-      }
+    const parsed = await callLLMJson<Record<string, string>>({
+      provider,
+      apiKey,
+      model,
+      baseUrl,
+      systemPrompt:
+        'You are a brilliant product strategist. Analyze product ideas and return structured JSON for Product Requirements Documents.',
+      userPrompt: promptWithContext,
+      geminiProperties: {
+        productName: { type: Type.STRING },
+        targetAudience: { type: Type.STRING },
+        problemStatement: { type: Type.STRING },
+        proposedSolution: { type: Type.STRING },
+        coreFeatures: { type: Type.STRING },
+        keyFeatures: { type: Type.STRING },
+        businessGoals: { type: Type.STRING },
+        successMetrics: { type: Type.STRING },
+        futureFeatures: { type: Type.STRING },
+        techStack: { type: Type.STRING },
+        constraints: { type: Type.STRING }
+      },
+      geminiRequired: [
+        'productName',
+        'targetAudience',
+        'problemStatement',
+        'proposedSolution',
+        'coreFeatures',
+        'keyFeatures',
+        'businessGoals',
+        'successMetrics'
+      ]
     });
-
-    const jsonString = response.text?.trim();
-    if (!jsonString) {
-      throw new Error(
-        'Gemini returned an empty response while prefilling inputs.'
-      );
-    }
-
-    const parsed = JSON.parse(jsonString);
     const result: PrdInput = {
       productName: parsed.productName || DEFAULT_PRD_INPUT.productName,
       targetAudience: parsed.targetAudience || DEFAULT_PRD_INPUT.targetAudience,

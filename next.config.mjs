@@ -55,6 +55,7 @@ const withPWA = withPWAInit({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   // Ensure proper handling of CSS imports
   webpack: (config) => {
     // Important: return the modified config

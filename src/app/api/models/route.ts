@@ -21,7 +21,11 @@ interface FormattedModel {
 
 export async function POST(request: NextRequest) {
   try {
-    const { apiKey } = (await request.json()) as { apiKey?: string };
+    const { apiKey, provider, baseUrl } = (await request.json()) as {
+      apiKey?: string;
+      provider?: string;
+      baseUrl?: string;
+    };
 
     if (!apiKey || typeof apiKey !== 'string') {
       return NextResponse.json(
@@ -30,7 +34,52 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use fetch API directly to get models list
+    if (provider === 'openai_compatible') {
+      const cleanUrl = (baseUrl || 'https://sembilan.kelazz.my.id/v1').replace(
+        /\/+$/,
+        ''
+      );
+      const response = await fetch(`${cleanUrl}/models`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to fetch models from custom endpoint: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`
+        );
+      }
+
+      const raw = await response.json();
+      const rawList: Array<{ id?: string; name?: string }> = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw.data)
+          ? raw.data
+          : Array.isArray(raw.models)
+            ? raw.models
+            : [];
+
+      const models: FormattedModel[] = rawList.map((m) => {
+        const id = m.id || m.name || 'unknown-model';
+        return {
+          value: id,
+          label: id,
+          description: `Model on ${cleanUrl}`,
+          displayName: id,
+          inputTokenLimit: null,
+          outputTokenLimit: null,
+          supportedGenerationMethods: ['generateContent']
+        };
+      });
+
+      return NextResponse.json({ models });
+    }
+
+    // Use fetch API directly to get models list for Google Gemini
     const response = await fetch(
       'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey,
       {

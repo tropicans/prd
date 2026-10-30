@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildGenerationPrompt, PrdInput } from '../../../lib/prd';
-import { GoogleGenAI } from '@google/genai';
 import { getContextHeader } from '../_lib/datetime';
+import { callLLMText } from '../_lib/llm-service';
+import { LLMProvider } from '@/lib/llm-types';
 
 function validateInputs(value: unknown): value is PrdInput {
   if (!value || typeof value !== 'object') {
@@ -37,11 +38,14 @@ function validateInputs(value: unknown): value is PrdInput {
 
 export async function POST(request: NextRequest) {
   try {
-    const { inputs, apiKey, model } = (await request.json()) as {
-      inputs?: unknown;
-      apiKey?: string;
-      model?: string;
-    };
+    const { inputs, apiKey, model, provider, baseUrl } =
+      (await request.json()) as {
+        inputs?: unknown;
+        apiKey?: string;
+        model?: string;
+        provider?: LLMProvider;
+        baseUrl?: string;
+      };
 
     if (!apiKey || typeof apiKey !== 'string') {
       return NextResponse.json(
@@ -57,23 +61,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const client = new GoogleGenAI({ apiKey });
     const basePrompt = buildGenerationPrompt(inputs);
-
-    // Add current date/time context to the prompt
     const promptWithContext = getContextHeader() + basePrompt;
 
-    const response = await client.models.generateContent({
-      model: model || 'gemini-flash-latest',
-      contents: promptWithContext
+    const text = await callLLMText({
+      provider,
+      apiKey,
+      model,
+      baseUrl,
+      systemPrompt:
+        'You are an expert product manager and technical writer who generates comprehensive, professional, well-structured Product Requirements Documents (PRDs).',
+      userPrompt: promptWithContext
     });
-
-    const text = response.text?.trim();
-    if (!text) {
-      throw new Error(
-        'Gemini returned an empty response while generating the PRD.'
-      );
-    }
 
     return NextResponse.json({ data: { prd: text } });
   } catch (error) {

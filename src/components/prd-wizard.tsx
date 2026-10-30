@@ -10,6 +10,7 @@ import {
   Camera
 } from 'lucide-react';
 import { PrdInput, DEFAULT_PRD_INPUT, ImageAttachment } from '@/lib/prd';
+import { LLMProvider } from '@/lib/llm-types';
 import { Button } from './button';
 import { Loader } from './loader';
 import { TextareaField } from './textarea-field';
@@ -20,6 +21,8 @@ interface PRDWizardProps {
   apiKey: string;
   selectedModel: string;
   modelDisplayName: string;
+  provider?: LLMProvider;
+  baseUrl?: string;
   onGeneratedPRD: (prd: string, inputs: PrdInput) => void;
   onFullPageView?: () => void;
   currentStep?: 1 | 2 | 3;
@@ -33,6 +36,8 @@ export function PRDWizard({
   apiKey,
   selectedModel,
   modelDisplayName,
+  provider,
+  baseUrl,
   onGeneratedPRD,
   onFullPageView,
   currentStep: externalCurrentStep,
@@ -112,7 +117,9 @@ export function PRDWizard({
           productIdea: productIdea.trim(),
           images: imageData,
           apiKey,
-          model: selectedModel
+          model: selectedModel,
+          provider,
+          baseUrl
         })
       });
 
@@ -155,7 +162,9 @@ export function PRDWizard({
         body: JSON.stringify({
           inputs: inputsWithImages,
           apiKey,
-          model: selectedModel
+          model: selectedModel,
+          provider,
+          baseUrl
         })
       });
 

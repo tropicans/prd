@@ -19,6 +19,8 @@ const eslintConfig = [
       'next-env.d.ts',
       '.playwright-mcp/**',
       'public/**',
+      '.agents/**',
+      '**/*.cjs',
       '**/*.js',
       '**/*.d.ts'
     ]

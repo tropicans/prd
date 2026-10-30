@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Type, GoogleGenAI } from '@google/genai';
+import { Type } from '@google/genai';
 import { PrdInput, SECTION_FIELD_MAPPING } from '../../../lib/prd';
 import { getContextHeader } from '../_lib/datetime';
+import { callLLMJson } from '../_lib/llm-service';
+import { LLMProvider } from '@/lib/llm-types';
 
 function isPrdInput(value: unknown): value is PrdInput {
   if (!value || typeof value !== 'object') {
@@ -35,14 +37,23 @@ function isPrdInput(value: unknown): value is PrdInput {
 
 export async function POST(request: NextRequest) {
   try {
-    const { currentInputs, sectionTitle, userFeedback, apiKey, model } =
-      (await request.json()) as {
-        currentInputs?: unknown;
-        sectionTitle?: string;
-        userFeedback?: string;
-        apiKey?: string;
-        model?: string;
-      };
+    const {
+      currentInputs,
+      sectionTitle,
+      userFeedback,
+      apiKey,
+      model,
+      provider,
+      baseUrl
+    } = (await request.json()) as {
+      currentInputs?: unknown;
+      sectionTitle?: string;
+      userFeedback?: string;
+      apiKey?: string;
+      model?: string;
+      provider?: LLMProvider;
+      baseUrl?: string;
+    };
 
     if (!apiKey || typeof apiKey !== 'string') {
       return NextResponse.json(
@@ -99,27 +110,18 @@ Your task is to update the values for the fields in the "${sectionTitle}" sectio
       responseSchemaProperties[field] = { type: Type.STRING };
     });
 
-    const client = new GoogleGenAI({ apiKey });
-    const response = await client.models.generateContent({
-      model: model || 'gemini-flash-latest',
-      contents: promptWithContext,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: responseSchemaProperties
-        }
-      }
+    const parsed = await callLLMJson<Record<string, unknown>>({
+      provider,
+      apiKey,
+      model,
+      baseUrl,
+      systemPrompt:
+        'You are an expert product management assistant. Return only valid JSON for the refined section fields.',
+      userPrompt: promptWithContext,
+      geminiProperties: responseSchemaProperties,
+      geminiRequired: fieldsToRefine
     });
 
-    const jsonString = response.text?.trim();
-    if (!jsonString) {
-      throw new Error(
-        'Gemini returned an empty response while refining the section.'
-      );
-    }
-
-    const parsed = JSON.parse(jsonString);
     const validatedResult: Partial<PrdInput> = {};
     fieldsToRefine.forEach((field) => {
       if (
