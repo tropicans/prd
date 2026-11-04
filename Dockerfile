@@ -9,8 +9,13 @@ WORKDIR /app
 
 # 2. Dependencies stage
 FROM base AS deps
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+COPY package.json package-lock.json* ./
+RUN \
+  if [ -f package-lock.json ]; then \
+    npm ci --legacy-peer-deps; \
+  else \
+    npm install --legacy-peer-deps; \
+  fi
 
 # 3. Builder stage
 FROM base AS builder
