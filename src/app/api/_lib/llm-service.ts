@@ -21,6 +21,18 @@ interface CallLLMJsonParams {
   geminiRequired?: string[];
 }
 
+interface OpenAIChatCompletionResponse {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+    text?: string;
+    delta?: {
+      content?: string;
+    };
+  }>;
+}
+
 function cleanBaseUrl(url?: string): string {
   const base = (url || DEFAULT_CUSTOM_ENDPOINT).trim();
   return base.replace(/\/+$/, '');
@@ -238,8 +250,24 @@ export async function callLLMText({
       throw new Error(errMsg);
     }
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content?.trim();
+    let data: OpenAIChatCompletionResponse;
+    if (typeof response.text === 'function') {
+      const rawText = await response.text();
+      try {
+        data = JSON.parse(rawText) as OpenAIChatCompletionResponse;
+      } catch {
+        data = robustExtractJson<OpenAIChatCompletionResponse>(rawText);
+      }
+    } else {
+      data = (await response.json()) as OpenAIChatCompletionResponse;
+    }
+
+    const content = (
+      data?.choices?.[0]?.message?.content ??
+      data?.choices?.[0]?.text ??
+      data?.choices?.[0]?.delta?.content ??
+      ''
+    ).trim();
     if (!content) {
       throw new Error('LLM returned an empty response.');
     }

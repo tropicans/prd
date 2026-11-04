@@ -167,5 +167,36 @@ describe('callLLMText custom endpoint error handling', () => {
       })
     ).rejects.toThrow('Invalid model requested: gpt-nonexistent');
   });
-});
 
+  it('reproduces bug: should handle custom LLM HTTP response body containing trailing characters at position 8543 without throwing Unexpected non-whitespace character after JSON', async () => {
+    // Large valid OpenAI chat completion response
+    const longContent = 'A'.repeat(8500);
+    const validJsonObj = {
+      id: 'chatcmpl-test',
+      choices: [
+        {
+          message: {
+            content: `PRD Content: ${longContent}`
+          }
+        }
+      ]
+    };
+    const responseWithTrailingData = JSON.stringify(validJsonObj) + '\n{"usage":{"total_tokens":500}}';
+
+    // A real fetch Response that has trailing non-whitespace data after the first JSON object
+    global.fetch = vi.fn().mockResolvedValue(new Response(responseWithTrailingData, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    }));
+
+    const result = await callLLMText({
+      provider: 'openai_compatible',
+      apiKey: 'test-key',
+      baseUrl: 'https://sembilan.kelazz.my.id/v1',
+      userPrompt: 'Generate PRD'
+    });
+
+    expect(result).toBeDefined();
+    expect(result).toContain('PRD Content:');
+  });
+});
